@@ -82,12 +82,11 @@ export async function exchangeCodeForToken(
   // GitHub's token endpoint does not send CORS headers for browser requests.
   // A CORS proxy is needed for this one-time token exchange call.
   // All subsequent GitHub *data* API calls go directly to api.github.com.
-  const tokenEndpoint = 'https://github.com/login/oauth/access_token';
-  // corsproxy.io blocks POST to GitHub's token endpoint – use thingproxy instead.
-  // Override by setting VITE_TOKEN_PROXY_URL (recommended for production).
+  // Cloudflare Worker proxy handles CORS for the token exchange.
+  // Override by setting VITE_TOKEN_PROXY_URL environment variable.
   const proxyBase =
     import.meta.env.VITE_TOKEN_PROXY_URL ??
-    `https://thingproxy.freeboard.io/fetch/${tokenEndpoint}`;
+    'https://prt-org-exp.protham-dey.workers.dev/';
 
   const response = await fetch(proxyBase, {
     method: 'POST',
