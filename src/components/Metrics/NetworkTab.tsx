@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
+import { forceCollide } from 'd3-force';
 import { useContributors } from '../../hooks/useContributors';
 import type { RepoData, Contributor } from '../../types';
 
@@ -33,22 +34,25 @@ export default function NetworkTab({ orgName, repos }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
   const imgCache = useRef<Record<string, HTMLImageElement>>({});
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Handle resize
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setDimensions({
-            width: entry.contentRect.width,
-            height: entry.contentRect.height,
-          });
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setDimensions({ width, height });
         }
       }
     });
     observer.observe(containerRef.current);
+    // Initial measurement
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width > 0) {
+      setDimensions({ width: rect.width, height: rect.height });
+    }
     return () => observer.disconnect();
   }, []);
 
@@ -104,9 +108,14 @@ export default function NetworkTab({ orgName, repos }: Props) {
   // Center the graph after load and adjust physics
   useEffect(() => {
     if (graphRef.current) {
-      // Increase repulsion vastly and link distance to accommodate large cards
-      graphRef.current.d3Force('charge')?.strength(-1500);
-      graphRef.current.d3Force('link')?.distance(200);
+      // Fine-tune repulsion
+      graphRef.current.d3Force('charge')?.strength(-500);
+      graphRef.current.d3Force('link')?.distance(100);
+      // Hard collision physics to perfectly guarantee cards never overlap
+      graphRef.current.d3Force('collide', forceCollide()
+        .radius((node: any) => node.group === 'repo' ? 70 : 55)
+        .iterations(2)
+      );
     }
 
     if (graphData.nodes.length > 0) {
@@ -170,16 +179,17 @@ export default function NetworkTab({ orgName, repos }: Props) {
         </div>
         
         <div ref={containerRef} style={{ width: '100%', height: '600px', backgroundColor: 'var(--bg-default)' }}>
-          <ForceGraph2D
-            ref={graphRef}
-            width={dimensions.width}
-            height={dimensions.height}
-            graphData={graphData}
-            nodeLabel={() => ''} /* Disable default tooltip since we draw text natively */
-            nodeRelSize={1}
-            linkColor={() => '#a0d911'}
-            linkWidth={(link: any) => Math.min(6, Math.max(1, Math.log10(link.value + 1) * 3))}
-            nodeCanvasObject={(node: any, ctx) => {
+          {dimensions && (
+            <ForceGraph2D
+              ref={graphRef}
+              width={dimensions.width}
+              height={dimensions.height}
+              graphData={graphData}
+              nodeLabel={() => ''} /* Disable default tooltip since we draw text natively */
+              nodeRelSize={1}
+              linkColor={() => '#a0d911'}
+              linkWidth={(link: any) => Math.min(6, Math.max(1, Math.log10(link.value + 1) * 3))}
+              nodeCanvasObject={(node: any, ctx) => {
               const isRepo = node.group === 'repo';
               const label = node.name;
               
@@ -275,17 +285,18 @@ export default function NetworkTab({ orgName, repos }: Props) {
               ctx.fillStyle = color;
               ctx.fillRect(node.x - width/2, node.y - height/2, width, height);
             }}
-            enableNodeDrag={true}
-            enablePanInteraction={true}
-            enableZoomInteraction={true}
-            onNodeClick={(node: any) => {
-              if (node.group === 'contributor') {
-                window.open((node.data as Contributor).html_url, '_blank');
-              } else if (node.group === 'repo') {
-                window.open((node.data as RepoData).html_url, '_blank');
-              }
-            }}
-          />
+              enableNodeDrag={true}
+              enablePanInteraction={true}
+              enableZoomInteraction={true}
+              onNodeClick={(node: any) => {
+                if (node.group === 'contributor') {
+                  window.open((node.data as Contributor).html_url, '_blank');
+                } else if (node.group === 'repo') {
+                  window.open((node.data as RepoData).html_url, '_blank');
+                }
+              }}
+            />
+          )}
         </div>
       </div>
     </div>
