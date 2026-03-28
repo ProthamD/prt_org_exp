@@ -43,7 +43,10 @@ export default function NetworkTab({ orgName, repos }: Props) {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
-          setDimensions({ width, height });
+          setDimensions((prev) => {
+            if (prev?.width === width && prev?.height === height) return prev;
+            return { width, height };
+          });
         }
       }
     });
@@ -108,14 +111,18 @@ export default function NetworkTab({ orgName, repos }: Props) {
   // Center the graph after load and adjust physics
   useEffect(() => {
     if (graphRef.current) {
-      // Fine-tune repulsion
-      graphRef.current.d3Force('charge')?.strength(-500);
-      graphRef.current.d3Force('link')?.distance(100);
-      // Hard collision physics to perfectly guarantee cards never overlap
-      graphRef.current.d3Force('collide', forceCollide()
-        .radius((node: any) => node.group === 'repo' ? 70 : 55)
-        .iterations(2)
-      );
+      try {
+        // Fine-tune repulsion
+        graphRef.current.d3Force('charge')?.strength(-500);
+        graphRef.current.d3Force('link')?.distance(100);
+        // Hard collision physics to perfectly guarantee cards never overlap
+        graphRef.current.d3Force('collide', forceCollide()
+          .radius((node: any) => node?.group === 'repo' ? 70 : 55)
+          .iterations(2)
+        );
+      } catch (e) {
+        console.error("Force configuration error", e);
+      }
     }
 
     if (graphData.nodes.length > 0) {
