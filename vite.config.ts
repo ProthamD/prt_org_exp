@@ -1,11 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-import { cloudflare } from "@cloudflare/vite-plugin";
-
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), cloudflare()],
+  plugins: [react()],
   base: '/prt_org_exp/', // GitHub Pages deployment
   server: {
     port: 5173,
