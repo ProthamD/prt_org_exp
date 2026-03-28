@@ -101,8 +101,14 @@ export default function NetworkTab({ orgName, repos }: Props) {
     return { nodes, links };
   }, [contributors, repos]);
 
-  // Center the graph after load
+  // Center the graph after load and adjust physics
   useEffect(() => {
+    if (graphRef.current) {
+      // Increase repulsion vastly and link distance to accommodate large cards
+      graphRef.current.d3Force('charge')?.strength(-1500);
+      graphRef.current.d3Force('link')?.distance(200);
+    }
+
     if (graphData.nodes.length > 0) {
       setTimeout(() => {
         graphRef.current?.zoomToFit(400, 20);
