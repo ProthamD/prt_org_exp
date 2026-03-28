@@ -438,45 +438,49 @@ export async function fetchOrgContributors(
   const cached = await getCache<Contributor[]>(key);
   if (cached) return { data: cached, fromCache: true };
 
-  // Take top 10 repos by stars for efficiency
-  const topRepos = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count).slice(0, 10);
+  // Take top 50 repos by stars for a more comprehensive network
+  const topRepos = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count).slice(0, 50);
 
   const contributorMap = new Map<string, Contributor>();
 
-  await Promise.all(
-    topRepos.map(async (repo) => {
-      try {
-        interface GHContributor { login: string; avatar_url: string; html_url: string; contributions: number }
-        const list = await ghFetch<GHContributor[]>(
-          `/repos/${orgName}/${repo.name}/contributors?per_page=30&anon=0`,
-          token,
-          onApiCall,
-        );
-        list.forEach((c) => {
-          if (c.login.includes('[bot]')) return;
-          const existing = contributorMap.get(c.login);
-          if (existing) {
-            existing.contributions += c.contributions;
-            existing.repos.push(repo.name);
-          } else {
-            contributorMap.set(c.login, {
-              login: c.login,
-              avatar_url: c.avatar_url,
-              html_url: c.html_url,
-              contributions: c.contributions,
-              repos: [repo.name],
-            });
-          }
-        });
-      } catch {
-        // skip repos that block contributor access
-      }
-    }),
-  );
+  // Process in chunks of 5 to avoid GitHub secondary rate limits
+  for (let i = 0; i < topRepos.length; i += 5) {
+    const chunk = topRepos.slice(i, i + 5);
+    await Promise.all(
+      chunk.map(async (repo) => {
+        try {
+          interface GHContributor { login: string; avatar_url: string; html_url: string; contributions: number }
+          const list = await ghFetch<GHContributor[]>(
+            `/repos/${orgName}/${repo.name}/contributors?per_page=30&anon=0`,
+            token,
+            onApiCall,
+          );
+          list.forEach((c) => {
+            if (c.login.includes('[bot]')) return;
+            const existing = contributorMap.get(c.login);
+            if (existing) {
+              existing.contributions += c.contributions;
+              existing.repos.push(repo.name);
+            } else {
+              contributorMap.set(c.login, {
+                login: c.login,
+                avatar_url: c.avatar_url,
+                html_url: c.html_url,
+                contributions: c.contributions,
+                repos: [repo.name],
+              });
+            }
+          });
+        } catch {
+          // skip repos that block contributor access
+        }
+      })
+    );
+  }
 
   const data = Array.from(contributorMap.values())
     .sort((a, b) => b.contributions - a.contributions)
-    .slice(0, 50);
+    .slice(0, 150);
 
   await setCache(key, data, TTL_CONTRIBUTORS);
   return { data, fromCache: false };

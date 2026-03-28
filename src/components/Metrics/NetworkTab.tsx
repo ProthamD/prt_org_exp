@@ -32,6 +32,7 @@ export default function NetworkTab({ orgName, repos }: Props) {
   const { contributors, loading, error, fromCache } = useContributors(orgName, repos);
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
+  const imgCache = useRef<Record<string, HTMLImageElement>>({});
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   // Handle resize
@@ -58,8 +59,8 @@ export default function NetworkTab({ orgName, repos }: Props) {
     const links: LinkData[] = [];
     const repoSet = new Set<string>();
 
-    // We only take the top contributors to avoid an overly dense graph
-    const topContributors = contributors.slice(0, 50);
+    // We take more contributors now since the limits were increased
+    const topContributors = contributors.slice(0, 150);
 
     // Build contributor nodes and links
     topContributors.forEach((c) => {
@@ -168,12 +169,106 @@ export default function NetworkTab({ orgName, repos }: Props) {
             width={dimensions.width}
             height={dimensions.height}
             graphData={graphData}
-            nodeLabel="name"
-            nodeRelSize={4}
-            nodeColor={(node: any) => node.color}
-            nodeVal={(node: any) => node.val}
-            linkColor={() => 'rgba(128,139,158,0.3)'}
-            linkWidth={(link: any) => Math.min(4, Math.max(1, link.value))}
+            nodeLabel={() => ''} /* Disable default tooltip since we draw text natively */
+            nodeRelSize={1}
+            linkColor={() => '#a0d911'}
+            linkWidth={(link: any) => Math.min(6, Math.max(1, Math.log10(link.value + 1) * 3))}
+            nodeCanvasObject={(node: any, ctx) => {
+              const isRepo = node.group === 'repo';
+              const label = node.name;
+              
+              const width = isRepo ? 110 : 90;
+              const height = isRepo ? 56 : 85;
+
+              // Card Background
+              ctx.fillStyle = '#101418';
+              ctx.beginPath();
+              (ctx as any).roundRect(node.x - width/2, node.y - height/2, width, height, 6);
+              ctx.fill();
+              
+              // Card Border
+              ctx.strokeStyle = '#30363d';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+
+              ctx.textAlign = 'center';
+
+              if (isRepo) {
+                // Repo Icon (</>) Placeholder
+                ctx.fillStyle = '#f0c040'; // yellow box
+                ctx.beginPath();
+                (ctx as any).roundRect(node.x - 12, node.y - height/2 + 6, 24, 16, 4);
+                ctx.strokeStyle = '#f0c040';
+                ctx.stroke();
+                ctx.fillStyle = '#101418';
+                ctx.fill();
+                ctx.fillStyle = '#f0c040';
+                ctx.font = '10px Sans-Serif';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('</>', node.x, node.y - height/2 + 15);
+
+                // Repo Name
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 12px Sans-Serif';
+                ctx.fillText(label, node.x, node.y + 2);
+
+                // Repo Stats
+                ctx.fillStyle = '#8b949e';
+                ctx.font = '10px Sans-Serif';
+                const stats = `★${node.data.stargazers_count}   ⑂${node.data.forks_count}   !${node.data.open_issues_count}`;
+                ctx.fillText(stats, node.x, node.y + 16);
+              } else {
+                // Contributor Layout
+                const url = node.data.avatar_url;
+                if (!imgCache.current[url]) {
+                  const img = new Image();
+                  img.src = url;
+                  imgCache.current[url] = img;
+                }
+                const img = imgCache.current[url];
+                if (img && img.complete && img.naturalHeight) {
+                  ctx.save();
+                  ctx.beginPath();
+                  (ctx as any).roundRect(node.x - 16, node.y - height/2 + 8, 32, 32, 4);
+                  ctx.clip();
+                  ctx.drawImage(img, node.x - 16, node.y - height/2 + 8, 32, 32);
+                  ctx.restore();
+                  ctx.strokeStyle = '#3fb950'; // green border around image
+                  ctx.lineWidth = 1.5;
+                  ctx.stroke();
+                }
+
+                // Name
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 11px Sans-Serif';
+                ctx.textBaseline = 'middle';
+                // Trim long names
+                const displayName = label.length > 12 ? label.substring(0, 10) + '..' : label;
+                ctx.fillText(displayName, node.x, node.y + 13);
+
+                // Commits Badge
+                const commits = node.data.contributions;
+                const badgeWidth = 60;
+                const badgeHeight = 16;
+                ctx.fillStyle = 'rgba(63, 185, 80, 0.1)';
+                ctx.beginPath();
+                (ctx as any).roundRect(node.x - badgeWidth/2, node.y + 24, badgeWidth, badgeHeight, 4);
+                ctx.fill();
+                ctx.strokeStyle = '#3fb950';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = '#3fb950';
+                ctx.font = '9px Sans-Serif';
+                ctx.fillText(`${commits} commits`, node.x, node.y + 24 + badgeHeight/2);
+              }
+            }}
+            nodePointerAreaPaint={(node: any, color, ctx) => {
+              const width = node.group === 'repo' ? 110 : 90;
+              const height = node.group === 'repo' ? 56 : 85;
+              ctx.fillStyle = color;
+              ctx.fillRect(node.x - width/2, node.y - height/2, width, height);
+            }}
             enableNodeDrag={true}
             enablePanInteraction={true}
             enableZoomInteraction={true}
