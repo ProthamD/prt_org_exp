@@ -9,12 +9,14 @@ import ReposTab from '../components/Metrics/ReposTab';
 import ContributorsTab from '../components/Metrics/ContributorsTab';
 import ActivityTab from '../components/Metrics/ActivityTab';
 import RepoDetailPanel from '../components/Metrics/RepoDetailPanel';
+import ContributorGraph from '../components/Dashboard/ContributorGraph';
 import { useOrg } from '../hooks/useOrg';
 import { useApp } from '../context/AppContext';
 import { useRepos } from '../hooks/useRepos';
+import { useContributors } from '../hooks/useContributors';
 import type { RepoData } from '../types';
 
-type Tab = 'overview' | 'repositories' | 'contributors' | 'activity';
+type Tab = 'overview' | 'repositories' | 'contributors' | 'activity' | 'graph';
 
 // Icon set
 const Icons = {
@@ -59,6 +61,13 @@ const Icons = {
       <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
     </svg>
   ),
+  Network: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/>
+      <line x1="6" y1="8" x2="6" y2="14"/><line x1="18" y1="8" x2="18" y2="14"/>
+      <line x1="8" y1="16" x2="16" y2="16"/><line x1="12" y1="14" x2="12" y2="18"/>
+    </svg>
+  ),
 };
 
 const DEFAULT_ORG = 'aossie';
@@ -71,6 +80,7 @@ export default function DashboardPage() {
   const { token } = useApp();
   const { org, loading: orgLoading, error: orgError, fetchOrgData } = useOrg();
   const { repos, loading: reposLoading, error: reposError, fetchRepoData } = useRepos();
+  const { contributors, loading: contributorsLoading } = useContributors(currentOrgName, repos);
 
   const handleSearch = useCallback(async (name: string) => {
     setCurrentOrgName(name);
@@ -97,6 +107,7 @@ export default function DashboardPage() {
     { id: 'repositories', label: 'Repositories', icon: <Icons.BookOpen />, count: repos.length },
     { id: 'contributors', label: 'Contributors', icon: <Icons.Users /> },
     { id: 'activity',     label: 'Activity',     icon: <Icons.Activity /> },
+    { id: 'graph',        label: 'Network',      icon: <Icons.Network /> },
   ];
 
   return (
@@ -202,6 +213,18 @@ export default function DashboardPage() {
               )}
               {activeTab === 'activity' && (
                 <ActivityTab orgName={currentOrgName} repos={repos} />
+              )}
+              {activeTab === 'graph' && (
+                <div className="tab-content">
+                  {contributorsLoading ? (
+                    <div className="loading-overlay">
+                      <div className="spinner" />
+                      <span>Building network graph…</span>
+                    </div>
+                  ) : (
+                    <ContributorGraph repos={repos} contributors={contributors} />
+                  )}
+                </div>
               )}
             </>
           )}
