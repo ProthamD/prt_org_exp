@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import { forceCollide } from 'd3-force';
 import { useContributors } from '../../hooks/useContributors';
 import type { RepoData, Contributor } from '../../types';
 
@@ -34,29 +33,25 @@ export default function NetworkTab({ orgName, repos }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
   const imgCache = useRef<Record<string, HTMLImageElement>>({});
-  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
-  // Handle resize
+  // Handle resize safely
   useEffect(() => {
     if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setDimensions((prev) => {
-            if (prev?.width === width && prev?.height === height) return prev;
-            return { width, height };
-          });
-        }
-      }
-    });
-    observer.observe(containerRef.current);
-    // Initial measurement
     const rect = containerRef.current.getBoundingClientRect();
-    if (rect.width > 0) {
+    if (rect.width > 0 && rect.height > 0) {
       setDimensions({ width: rect.width, height: rect.height });
     }
-    return () => observer.disconnect();
+    
+    // Simple window resize listener instead of aggressive ResizeObserver
+    const handleResize = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        setDimensions({ width, height });
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const graphData = useMemo<GraphData>(() => {
@@ -112,14 +107,11 @@ export default function NetworkTab({ orgName, repos }: Props) {
   useEffect(() => {
     if (graphRef.current) {
       try {
-        // Fine-tune repulsion
-        graphRef.current.d3Force('charge')?.strength(-500);
-        graphRef.current.d3Force('link')?.distance(100);
-        // Hard collision physics to perfectly guarantee cards never overlap
-        graphRef.current.d3Force('collide', forceCollide()
-          .radius((node: any) => node?.group === 'repo' ? 70 : 55)
-          .iterations(2)
-        );
+        // Explode the graph physics to aggressively solve overlapping
+        // since nodes are manually drawn much larger than the default d3 particles
+        graphRef.current.d3Force('charge')?.strength(-4000);
+        graphRef.current.d3Force('charge')?.distanceMax(2500);
+        graphRef.current.d3Force('link')?.distance(250);
       } catch (e) {
         console.error("Force configuration error", e);
       }
@@ -186,12 +178,11 @@ export default function NetworkTab({ orgName, repos }: Props) {
         </div>
         
         <div ref={containerRef} style={{ width: '100%', height: '600px', backgroundColor: 'var(--bg-default)' }}>
-          {dimensions && (
-            <ForceGraph2D
-              ref={graphRef}
-              width={dimensions.width}
-              height={dimensions.height}
-              graphData={graphData}
+          <ForceGraph2D
+            ref={graphRef}
+            width={dimensions.width}
+            height={dimensions.height}
+            graphData={graphData}
               nodeLabel={() => ''} /* Disable default tooltip since we draw text natively */
               nodeRelSize={1}
               linkColor={() => '#a0d911'}
@@ -303,7 +294,6 @@ export default function NetworkTab({ orgName, repos }: Props) {
                 }
               }}
             />
-          )}
         </div>
       </div>
     </div>
